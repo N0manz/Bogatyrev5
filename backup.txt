@@ -1,0 +1,184 @@
+<template>
+  <div class="pg">
+    <div class="ctrl">
+      <label>
+        Количество:
+        <select v-model.number="count">
+          <option :value="3">3</option>
+          <option :value="5">5</option>
+          <option :value="7">7</option>
+        </select>
+      </label>
+
+      <label>
+        Формат:
+        <select v-model="format">
+          <option value="hex">HEX</option>
+          <option value="rgb">RGB</option>
+        </select>
+      </label>
+
+      <label>
+        Базовый цвет:
+        <input type="color" v-model="baseColor" />
+        </label>
+
+        <label>
+        Тип палитры:
+        <select v-model="paletteType">
+            <option value="analogous">Аналогичная</option>
+            <option value="monochrome">Монохромная</option>
+            <option value="triad">Триада</option>
+            <option value="complementary">Комплементарная</option>
+        </select>
+        </label>
+
+        <label>
+        Настроение:
+        <select v-model="mood">
+            <option value="calm">Спокойное</option>
+            <option value="energetic">Энергичное</option>
+            <option value="professional">Профессиональное</option>
+        </select>
+        </label>
+
+        
+        
+
+      <button @click="randomize">Случайная палитра</button>
+    </div>
+
+    <div class="colors">
+      <ColorCard
+        v-for="(c, i) in palette"
+        :key="c.id"
+        :color="c"
+        :pinned="pinned[i] || false"
+        :format="format"
+        @copy="copyHex"
+        @toggle-pin="togglePin(i)"
+      />
+    </div>
+
+
+    <PreviewMockup :palette="palette" />
+
+    <button @click="exportJson" class="btn-export">Экспорт JSON</button>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, inject, onMounted, watch } from "vue";
+import ColorCard from "./ColorCard.vue";
+import PreviewMockup from "./PreviewMockup.vue";
+import { hslToHex, hexToRgbString } from "../utils/color-utils.js";
+import { contrastRatio } from "../utils/contrast.js";
+
+const notify = inject("notify");
+
+// состояние
+const count = ref(5);
+const format = ref("hex");
+const palette = ref([]);
+const pinned = reactive({});
+const baseColor = ref("#3498db"); 
+const paletteType = ref("analogous");
+const mood = ref("calm");
+
+
+// генерация гармоничной палитры
+function gen(n) {
+  const base = Math.floor(Math.random() * 360);
+  const step = 360 / n;
+  return [...Array(n)].map((_, i) => {
+    const h = (base + i * step + (Math.random() * 30 - 15)) % 360;
+    const s = 55 + Math.random() * 20;
+    const l = 40 + Math.random() * 20;
+    return { id: Math.random(), h, s, l, hex: hslToHex(h, s, l) };
+  });
+}
+
+// случайная палитра
+function randomize() {
+  const n = count.value;
+  const newPal = gen(n);
+
+  for (let i = 0; i < n; i++) {
+    if (pinned[i] && palette.value[i]) newPal[i] = palette.value[i];
+  }
+
+  palette.value = newPal;
+
+  // удаляем лишние pinned, если количество уменьшилось
+  Object.keys(pinned).forEach((key) => {
+    if (key >= n) delete pinned[key];
+  });
+}
+
+// закрепление
+function togglePin(i) {
+  pinned[i] = !pinned[i];
+}
+
+// копирование
+function copyHex(hex) {
+  navigator.clipboard.writeText(hex);
+  notify(`${hex} скопирован`);
+}
+
+// экспорт JSON
+function exportJson() {
+  if (!palette.value.length) {
+    notify("Палитра пуста");
+    return;
+  }
+  const jsonStr = JSON.stringify(palette.value, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "palette.json";
+  link.click();
+  URL.revokeObjectURL(url);
+  notify("Палитра экспортирована");
+}
+
+// автоматически генерируем новую палитру при изменении count
+watch(count, () => {
+  randomize();
+});
+
+
+
+
+
+onMounted(() => {
+  palette.value = gen(count.value);
+});
+</script>
+
+<style scoped>
+.pg {
+  max-width: 900px;
+  margin: auto;
+}
+.ctrl {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.colors {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.btn-export {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background-color: #1f6feb;
+  color: white;
+}
+</style>
